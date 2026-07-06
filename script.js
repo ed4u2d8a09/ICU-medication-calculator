@@ -248,7 +248,7 @@ function renderDrugs() {
             let concInputHtml = '';
 
             if (drug.fixedRateText) {
-                rateDisplayHtml = `<span class="rate-value" id="rate-${index}" style="font-size: 1.3rem;">${drug.fixedRateText}</span>`;
+                rateDisplayHtml = `<span class="rate-value rate-fixed" id="rate-${index}">${drug.fixedRateText}</span>`;
                 // Disable concentration input for fixed rate drugs to avoid confusion
                 concInputHtml = `
                     <div class="concentration-input">
@@ -277,7 +277,7 @@ function renderDrugs() {
                 </div>
                 <div class="drug-details">
                     <div><strong>Dose:</strong> ${drug.doseText}</div>
-                    <div class="prep-info">📝 ${drug.prepText}</div>
+                    <div class="prep-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>${drug.prepText}</span></div>
                     ${concInputHtml}
                 </div>
                 <div class="calculation-result">
@@ -319,11 +319,11 @@ function updateSpecificDrug(index, drug, weightVal, newConc) {
     
     rateElement.innerText = `${rates.min} - ${rates.max}`;
     
-    // Little animation
-    rateElement.style.color = '#fff';
+    // Brief highlight to signal the value changed
+    rateElement.style.color = 'var(--color-secondary)';
     setTimeout(() => {
-        rateElement.style.color = '#34d399';
-    }, 150);
+        rateElement.style.color = '';
+    }, 200);
 }
 
 function init() {
