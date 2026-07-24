@@ -3,13 +3,15 @@ const drugsData = [
     category: "Pressors, Inotropes, and Chronotropes",
     name: "Norepinephrine",
     class: "α1 > β1",
-    doseText: "1–40 μg/min",
+    doseText: "5–40 μg/min",
     prepText: "16mg (4 amps) in D5W 500ml",
     unit: "μg/min",
-    doseMin: 1, doseMax: 40,
+    doseMin: 5, doseMax: 40,
     concentration: 32,
     concentrationUnit: "μg/ml",
-    weightBased: false
+    weightBased: false,
+    note: "10 μg/min 以上才比較有升血壓的效果；30 μg/min 以上通常不會再有額外反應，應考慮加上第二線升壓藥。",
+    refDose: { value: 30, label: "效果天花板" }
   },
   {
     category: "Pressors, Inotropes, and Chronotropes",
@@ -218,6 +220,19 @@ function calculateRate(drug, weight, overrideConc) {
     };
 }
 
+// Rate (ml/hr) for one specific dose — used by the reference-dose hint on a card
+function calculateDoseRate(drug, weight, dose, overrideConc) {
+    const conc = overrideConc !== undefined ? overrideConc : drug.concentration;
+    if (conc <= 0) return '—';
+
+    let factor = 1;
+    if (drug.unit.includes("/min")) factor *= 60;
+    if (drug.weightBased) factor *= weight;
+
+    const rate = (dose * factor) / conc;
+    return rate < 10 ? rate.toFixed(1) : Math.round(rate);
+}
+
 function renderDrugs() {
     const container = document.getElementById('drug-list');
     container.innerHTML = '';
@@ -246,6 +261,15 @@ function renderDrugs() {
             
             let rateDisplayHtml = '';
             let concInputHtml = '';
+            let noteHtml = '';
+            if (drug.note || drug.refDose) {
+                let noteBody = drug.note ? `<span>${drug.note}</span>` : '';
+                if (drug.refDose) {
+                    const refRate = calculateDoseRate(drug, weight, drug.refDose.value);
+                    noteBody += `<span class="drug-note-ref">${drug.refDose.label ? drug.refDose.label + '：' : ''}<strong>${drug.refDose.value} ${drug.unit}</strong> ≈ <strong id="refrate-${index}">${refRate}</strong> ml/hr</span>`;
+                }
+                noteHtml = `<div class="drug-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><div class="drug-note-body">${noteBody}</div></div>`;
+            }
 
             if (drug.fixedRateText) {
                 rateDisplayHtml = `<span class="rate-value rate-fixed" id="rate-${index}">${drug.fixedRateText}</span>`;
@@ -278,6 +302,7 @@ function renderDrugs() {
                 <div class="drug-details">
                     <div><strong>Dose:</strong> ${drug.doseText}</div>
                     <div class="prep-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>${drug.prepText}</span></div>
+                    ${noteHtml}
                     ${concInputHtml}
                 </div>
                 <div class="calculation-result">
@@ -318,7 +343,14 @@ function updateSpecificDrug(index, drug, weightVal, newConc) {
     const rates = calculateRate(drug, weight, newConc);
     
     rateElement.innerText = `${rates.min} - ${rates.max}`;
-    
+
+    if (drug.refDose) {
+        const refElement = document.getElementById(`refrate-${index}`);
+        if (refElement) {
+            refElement.innerText = calculateDoseRate(drug, weight, drug.refDose.value, newConc);
+        }
+    }
+
     // Brief highlight to signal the value changed
     rateElement.style.color = 'var(--color-secondary)';
     setTimeout(() => {

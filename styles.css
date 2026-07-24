@@ -262,6 +262,42 @@ h1 {
     color: var(--color-secondary);
 }
 
+.drug-note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    color: var(--color-muted-text);
+    background: rgba(37, 99, 235, 0.07);
+    border-left: 3px solid var(--color-secondary);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    font-size: 0.82rem;
+    line-height: 1.5;
+}
+
+.drug-note svg {
+    flex: none;
+    width: 15px;
+    height: 15px;
+    margin-top: 2px;
+    color: var(--color-secondary);
+}
+
+.drug-note-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.drug-note-ref {
+    color: var(--color-secondary);
+    font-family: var(--font-ui);
+}
+
+.drug-note-ref strong {
+    font-weight: 700;
+}
+
 /* ---------- Concentration input ---------- */
 .concentration-input {
     display: flex;
