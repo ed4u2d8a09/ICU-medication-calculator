@@ -202,10 +202,10 @@ const drugsData = [
     name: "Furosemide",
     class: "loop diuretic",
     doseText: "80 mg IV bolus，續 5–40 mg/hr infusion",
-    prepText: "10 amps (200mg) in 0.9% NaCl 200ml",
+    prepText: "不需稀釋 (20mg/2ml)",
     unit: "mg/h",
     doseMin: 5, doseMax: 40,
-    concentration: 1,
+    concentration: 10,
     concentrationUnit: "mg/ml",
     weightBased: false,
     note: "使用時機：massive fluid overload（大量體液過載）。先給 80 mg IV bolus，再接續 infusion。",
@@ -213,6 +213,10 @@ const drugsData = [
       "eGFR ≥ 30 mL/min/1.73 m²：infusion 從 5 mg/hr 開始。若反應不佳（urine output 未達 ≥ 100 mL/hr），再補一次 bolus 並將速率提高到 10 mg/hr；之後可視需要繼續上調，最高 40 mg/hr。",
       "eGFR < 30 mL/min/1.73 m²：infusion 從 20 mg/hr 開始。若反應不佳，再補一次 bolus 並將速率提高到 40 mg/hr。",
       "反應目標：urine output ≥ 100 mL/hr。"
+    ],
+    refPoints: [
+      { value: 5, label: "起始（eGFR ≥ 30）" },
+      { value: 20, label: "起始（eGFR < 30）" }
     ]
   },
   {
@@ -311,6 +315,10 @@ function renderDrugs() {
             if (drug.note || drug.refDose) {
                 let noteBody = drug.note ? `<span>${drug.note}</span>` : '';
                 (drug.noteList || []).forEach(line => { noteBody += `<span>${line}</span>`; });
+                (drug.refPoints || []).forEach((pt, i) => {
+                    const r = calculateDoseRate(drug, weight, pt.value);
+                    noteBody += `<span class="drug-note-ref">${pt.label}：<strong>${pt.value} ${drug.unit}</strong> ≈ <strong id="refpoint-${index}-${i}">${r}</strong> ml/hr</span>`;
+                });
                 if (drug.refRange) {
                     const r = drug.refRange;
                     const lo = calculateDoseRate(drug, weight, r.min);
@@ -409,6 +417,11 @@ function updateSpecificDrug(index, drug, weightVal, newConc) {
             refElement.innerText = calculateDoseRate(drug, weight, drug.refDose.value, newConc);
         }
     }
+
+    (drug.refPoints || []).forEach((pt, i) => {
+        const el = document.getElementById(`refpoint-${index}-${i}`);
+        if (el) el.innerText = calculateDoseRate(drug, weight, pt.value, newConc);
+    });
 
     if (drug.refRange) {
         const bandElement = document.getElementById(`refrange-${index}`);
