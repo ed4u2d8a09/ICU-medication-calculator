@@ -192,8 +192,23 @@ const drugsData = [
     concentration: 2,
     concentrationUnit: "mg/ml",
     weightBased: true
+  },
+  {
+    category: "Corticosteroids",
+    name: "Hydrocortisone",
+    class: "glucocorticoid",
+    doseText: "50 mg Q6H",
+    prepText: "IV push，不需稀釋（每日總量 200 mg）",
+    bolus: true,
+    bolusText: "50 mg Q6H",
+    note: "Norepinephrine 或 Epinephrine 劑量 ≥ 0.25 μg/kg/min 時考慮使用。",
+    thresholdPerKg: { value: 0.25, unit: "μg/min", label: "以目前體重換算" }
   }
 ];
+
+function formatThreshold(v) {
+    return v < 10 ? Number(v.toFixed(1)).toString() : Math.round(v).toString();
+}
 
 function calculateRate(drug, weight, overrideConc) {
     let conc = overrideConc !== undefined ? overrideConc : drug.concentration;
@@ -268,10 +283,16 @@ function renderDrugs() {
                     const refRate = calculateDoseRate(drug, weight, drug.refDose.value);
                     noteBody += `<span class="drug-note-ref">${drug.refDose.label ? drug.refDose.label + '：' : ''}<strong>${drug.refDose.value} ${drug.unit}</strong> ≈ <strong id="refrate-${index}">${refRate}</strong> ml/hr</span>`;
                 }
+                if (drug.thresholdPerKg) {
+                    const t = drug.thresholdPerKg;
+                    noteBody += `<span class="drug-note-ref">${t.label}：<strong>${t.value} μg/kg/min</strong> ≈ <strong id="threshold-${index}">${formatThreshold(t.value * weight)}</strong> ${t.unit}</span>`;
+                }
                 noteHtml = `<div class="drug-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><div class="drug-note-body">${noteBody}</div></div>`;
             }
 
-            if (drug.fixedRateText) {
+            if (drug.bolus) {
+                rateDisplayHtml = `<span class="rate-value rate-fixed" id="rate-${index}">${drug.bolusText}</span>`;
+            } else if (drug.fixedRateText) {
                 rateDisplayHtml = `<span class="rate-value rate-fixed" id="rate-${index}">${drug.fixedRateText}</span>`;
                 // Disable concentration input for fixed rate drugs to avoid confusion
                 concInputHtml = `
@@ -321,7 +342,7 @@ function renderDrugs() {
 
     // Add listeners to concentration inputs
     drugsData.forEach((drug, index) => {
-        if (!drug.fixedRateText) {
+        if (!drug.fixedRateText && !drug.bolus) {
             const concInput = document.getElementById(`conc-${index}`);
             if(concInput) {
                 concInput.addEventListener('input', (e) => {
@@ -334,7 +355,7 @@ function renderDrugs() {
 }
 
 function updateSpecificDrug(index, drug, weightVal, newConc) {
-    if (drug.fixedRateText) return; // Do not update fixed rates
+    if (drug.fixedRateText || drug.bolus) return; // Neither has a rate to recompute
 
     const rateElement = document.getElementById(`rate-${index}`);
     if(!rateElement) return;
@@ -1013,10 +1034,14 @@ function init() {
         const weight = parseFloat(weightInput.value) || 60;
         
         drugsData.forEach((drug, index) => {
-            if (!drug.fixedRateText) {
+            if (!drug.fixedRateText && !drug.bolus) {
                 const concInput = document.getElementById(`conc-${index}`);
                 const currentConc = concInput ? parseFloat(concInput.value) : drug.concentration;
                 updateSpecificDrug(index, drug, weight, currentConc);
+            }
+            if (drug.thresholdPerKg) {
+                const el = document.getElementById(`threshold-${index}`);
+                if (el) el.innerText = formatThreshold(drug.thresholdPerKg.value * weight);
             }
         });
     });
