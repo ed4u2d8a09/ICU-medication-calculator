@@ -596,7 +596,7 @@ function renderMetAcidosisDDx(agState, uag, og) {
         const dir = uag.positive
             ? "正值 → <strong>腎性 (RTA)</strong>，往下依 K⁺／urine pH／Fe<sub>HCO₃</sub> 分型"
             : "負值 → <strong>腸胃道/其他流失</strong>（腹瀉等，NH₄⁺ 排出正常）";
-        uagLine = `<div class="ddx-uag">Urine anion gap = U<sub>Na</sub> + U<sub>K</sub> − U<sub>Cl</sub> = <strong>${fmt(uag.value)}</strong> mEq/L → ${dir}</div>`;
+        uagLine = `<div class="ddx-uag"><span class="ddx-uag-tag">計算推論</span><br>Urine anion gap = U<sub>Na</sub> + U<sub>K</sub> − U<sub>Cl</sub> = <strong>${fmt(uag.value)}</strong> mEq/L → ${dir}</div>`;
     }
 
     // Osmolar gap → highlight OG>10 vs OG<10 leaf within AGMA ingestions
@@ -607,7 +607,7 @@ function renderMetAcidosisDDx(agState, uag, og) {
         const dir = og.high
             ? "&gt;10 → 提示 <strong>toxic alcohol</strong>（Methanol / Ethylene glycol / Propylene glycol / Ethanol）"
             : "&lt;10 → 較不支持 toxic alcohol（考慮 Salicylates、5-oxoproline 等）";
-        ogLine = `<div class="ddx-uag">Osmolar gap = 實測 − 計算(2×Na + Glu/18 + BUN/2.8 = ${fmt(og.calc)}) = <strong>${fmt(og.value)}</strong> mOsm/kg → ${dir}</div>`;
+        ogLine = `<div class="ddx-uag"><span class="ddx-uag-tag">計算推論</span><br>Osmolar gap = 實測 − 計算(2×Na + Glu/18 + BUN/2.8 = ${fmt(og.calc)}) = <strong>${fmt(og.value)}</strong> mOsm/kg → ${dir}</div>`;
     }
 
     // branch state classes: highlight the applicable branch, dim the other.
