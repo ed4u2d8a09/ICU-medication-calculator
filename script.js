@@ -23,7 +23,11 @@ const drugsData = [
     doseMin: 0.01, doseMax: 0.1,
     concentration: 0.4,
     concentrationUnit: "U/ml",
-    weightBased: false
+    weightBased: false,
+    note: "Norepinephrine 已用到 0.25–0.5 μg/kg/min 仍有低血壓時，考慮加上 Vasopressin。",
+    noteList: ["Septic shock 使用劑量為 0.03–0.04 U/min（固定劑量，一般不滴定）。"],
+    refRange: { min: 0.03, max: 0.04, label: "Septic shock 劑量" },
+    thresholdPerKg: { value: 0.25, max: 0.5, unit: "μg/min", label: "NE 閾值換算（依目前體重）" }
   },
   {
     category: "Pressors, Inotropes, and Chronotropes",
@@ -210,6 +214,15 @@ function formatThreshold(v) {
     return v < 10 ? Number(v.toFixed(1)).toString() : Math.round(v).toString();
 }
 
+function formatBand(lo, hi) {
+    return hi === undefined ? `${lo}` : `${lo}–${hi}`;
+}
+
+function weighThreshold(t, weight) {
+    const lo = formatThreshold(t.value * weight);
+    return t.max === undefined ? lo : `${lo} – ${formatThreshold(t.max * weight)}`;
+}
+
 function calculateRate(drug, weight, overrideConc) {
     let conc = overrideConc !== undefined ? overrideConc : drug.concentration;
     if (conc <= 0) return { min: 0, max: 0 };
@@ -279,13 +292,20 @@ function renderDrugs() {
             let noteHtml = '';
             if (drug.note || drug.refDose) {
                 let noteBody = drug.note ? `<span>${drug.note}</span>` : '';
+                (drug.noteList || []).forEach(line => { noteBody += `<span>${line}</span>`; });
+                if (drug.refRange) {
+                    const r = drug.refRange;
+                    const lo = calculateDoseRate(drug, weight, r.min);
+                    const hi = calculateDoseRate(drug, weight, r.max);
+                    noteBody += `<span class="drug-note-ref">${r.label}：<strong>${r.min}–${r.max} ${drug.unit}</strong> ≈ <strong id="refrange-${index}">${lo} – ${hi}</strong> ml/hr</span>`;
+                }
                 if (drug.refDose) {
                     const refRate = calculateDoseRate(drug, weight, drug.refDose.value);
                     noteBody += `<span class="drug-note-ref">${drug.refDose.label ? drug.refDose.label + '：' : ''}<strong>${drug.refDose.value} ${drug.unit}</strong> ≈ <strong id="refrate-${index}">${refRate}</strong> ml/hr</span>`;
                 }
                 if (drug.thresholdPerKg) {
                     const t = drug.thresholdPerKg;
-                    noteBody += `<span class="drug-note-ref">${t.label}：<strong>${t.value} μg/kg/min</strong> ≈ <strong id="threshold-${index}">${formatThreshold(t.value * weight)}</strong> ${t.unit}</span>`;
+                    noteBody += `<span class="drug-note-ref">${t.label}：<strong>${formatBand(t.value, t.max)} μg/kg/min</strong> ≈ <strong id="threshold-${index}">${weighThreshold(t, weight)}</strong> ${t.unit}</span>`;
                 }
                 noteHtml = `<div class="drug-note"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg><div class="drug-note-body">${noteBody}</div></div>`;
             }
@@ -369,6 +389,15 @@ function updateSpecificDrug(index, drug, weightVal, newConc) {
         const refElement = document.getElementById(`refrate-${index}`);
         if (refElement) {
             refElement.innerText = calculateDoseRate(drug, weight, drug.refDose.value, newConc);
+        }
+    }
+
+    if (drug.refRange) {
+        const bandElement = document.getElementById(`refrange-${index}`);
+        if (bandElement) {
+            const lo = calculateDoseRate(drug, weight, drug.refRange.min, newConc);
+            const hi = calculateDoseRate(drug, weight, drug.refRange.max, newConc);
+            bandElement.innerText = `${lo} – ${hi}`;
         }
     }
 
@@ -1041,7 +1070,7 @@ function init() {
             }
             if (drug.thresholdPerKg) {
                 const el = document.getElementById(`threshold-${index}`);
-                if (el) el.innerText = formatThreshold(drug.thresholdPerKg.value * weight);
+                if (el) el.innerText = weighThreshold(drug.thresholdPerKg, weight);
             }
         });
     });
