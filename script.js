@@ -363,6 +363,7 @@ function updateSpecificDrug(index, drug, weightVal, newConc) {
  *  References:
  *   - Acid–base primary disorders & compensation formulas (NEJM 2014;371:1434)
  *   - Figure 2-5, Workup of acute hypoxemia (A–a gradient decision tree)
+ *   - Figure 4-2, Approach to metabolic acidosis
  * ========================================================================= */
 
 const ABG_NORMAL = { paco2: 40, hco3: 24 };
@@ -382,6 +383,38 @@ function block(tone, title, badge, badgeTone, items) {
                 <span class="abg-badge tone-${badgeTone}">${badge}</span>
             </div>
             <ul class="abg-block-list">${lis}</ul>
+        </div>`;
+}
+
+// ---- Visual helpers -------------------------------------------------------
+
+// Headline verdict banner — the single most important line of the read-out.
+function verdict(tone, main, sub, tag) {
+    return `
+        <div class="abg-verdict tone-${tone}">
+            <div class="abg-verdict-tag">${tag}</div>
+            <div class="abg-verdict-main">${main}</div>
+            ${sub ? `<div class="abg-verdict-sub">${sub}</div>` : ""}
+        </div>`;
+}
+
+// Horizontal gauge: normal band shaded, marker shows where the patient sits.
+function gauge(label, value, unit, min, max, lo, hi, digits) {
+    const span = max - min;
+    const pct = v => Math.max(0, Math.min(100, ((v - min) / span) * 100));
+    const state = value < lo ? "low" : value > hi ? "high" : "ok";
+    const arrow = state === "low" ? "↓" : state === "high" ? "↑" : "✓";
+    return `
+        <div class="gauge is-${state}">
+            <div class="gauge-top">
+                <span class="gauge-label">${label}</span>
+                <span class="gauge-value">${fmt(value, digits)}<span class="gauge-unit">${unit}</span><span class="gauge-arrow">${arrow}</span></span>
+            </div>
+            <div class="gauge-track">
+                <span class="gauge-band" style="left:${pct(lo)}%;width:${pct(hi) - pct(lo)}%"></span>
+                <span class="gauge-marker" style="left:${pct(value)}%"></span>
+            </div>
+            <div class="gauge-scale"><span>${min}</span><span class="gauge-norm">${lo}–${hi}</span><span>${max}</span></div>
         </div>`;
 }
 
@@ -420,41 +453,74 @@ function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glu
         RA: "Respiratory acidosis 呼吸性酸中毒",
         RAl: "Respiratory alkalosis 呼吸性鹼中毒",
     };
+    const SHORT = {
+        MA: "代謝性酸中毒",
+        MAl: "代謝性鹼中毒",
+        RA: "呼吸性酸中毒",
+        RAl: "呼吸性鹼中毒",
+    };
+
+    // Anion gap is computed up-front: it feeds both the verdict and the DDx tree.
+    let agState = "unknown", ag = NaN;
+    if (isFinite(na) && isFinite(cl)) {
+        ag = na - cl - hco3;
+        agState = ag > 12 ? "high" : "normal";
+    }
+
+    const uniq = [...new Set(primaries)];
+    const comps = uniq.map(p => compensationCheck(p, paco2, hco3));
 
     const blocks = [];
 
-    // pH summary block
-    blocks.push(block(phTone, "pH Status", `pH ${fmt(ph, 2)} · ${phStatus}`, phTone, [
-        `PaCO₂ <strong>${fmt(paco2)}</strong> mmHg (35–45) · HCO₃⁻ <strong>${fmt(hco3)}</strong> mEq/L (22–26)`
-    ]));
+    // ---- Headline verdict ----
+    const dxParts = uniq.map(p => {
+        if (p === "MA" && agState === "high") return "High AG " + SHORT[p];
+        if (p === "MA" && agState === "normal") return "Normal AG " + SHORT[p];
+        return SHORT[p];
+    });
+    // A compensation that overshoots/undershoots reveals a further disorder.
+    const extra = comps.length ? comps[0].extra : null;
+    if (extra && !dxParts.some(d => d.includes(extra))) dxParts.push(extra);
 
-    if (!primaries.length) {
+    const vTone = uniq.length ? (ph < 7.35 || ph > 7.45 ? "danger" : "warn") : "normal";
+    const vMain = uniq.length
+        ? dxParts.join(" ＋ ")
+        : "無明顯酸鹼異常";
+    const vSubBits = [phStatus];
+    if (comps.length && comps[0].tag) vSubBits.push(comps[0].tag);
+    if (dxParts.length > 1) vSubBits.push("Mixed disorder 混合型");
+    blocks.push(verdict(vTone, vMain, vSubBits.join(" · "), `pH ${fmt(ph, 2)}`));
+
+    // ---- Value gauges ----
+    const gauges = [
+        gauge("pH", ph, "", 6.9, 7.7, 7.35, 7.45, 2),
+        gauge("PaCO₂", paco2, " mmHg", 10, 90, 35, 45, 0),
+        gauge("HCO₃⁻", hco3, " mEq/L", 4, 44, 22, 26, 0),
+    ];
+    if (isFinite(ag)) gauges.push(gauge("Anion gap", ag, " mEq/L", 0, 36, 8, 12, 0));
+    blocks.push(`<div class="abg-gauges">${gauges.join("")}</div>`);
+
+    if (!uniq.length) {
         blocks.push(block("normal", "Primary disorder", "無明顯酸鹼異常", "normal", [
             "pH、PaCO₂、HCO₃⁻ 皆在正常範圍。"
         ]));
     }
 
     // Primary + compensation analysis (drive off the first / dominant primary)
-    const seen = new Set();
-    primaries.forEach((p, idx) => {
-        if (seen.has(p)) return; seen.add(p);
+    uniq.forEach((p, idx) => {
         const isPrimary = idx === 0;
-        const comp = compensationCheck(p, paco2, hco3);
         blocks.push(block(
             isPrimary ? "danger" : "warn",
             isPrimary ? "Primary disorder" : "Concurrent disorder",
             LABEL[p],
             isPrimary ? "danger" : "warn",
-            comp
+            comps[idx].items
         ));
     });
 
-    // Anion gap (optional)
-    let agState = "unknown";
-    if (isFinite(na) && isFinite(cl)) {
-        const ag = na - cl - hco3;
-        const high = ag > 12;
-        agState = high ? "high" : "normal";
+    // Anion gap detail (optional)
+    if (isFinite(ag)) {
+        const high = agState === "high";
         const agItems = [
             `Anion gap = Na⁺ − Cl⁻ − HCO₃⁻ = <strong>${fmt(ag)}</strong> mEq/L (正常 8–12)`
         ];
@@ -488,7 +554,7 @@ function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glu
     }
 
     // Metabolic acidosis differential diagnosis (Fig 4-2)
-    if (primaries.includes("MA") || agState === "high") {
+    if (uniq.includes("MA") || agState === "high") {
         blocks.push(renderMetAcidosisDDx(agState, uag, og));
     }
 
@@ -504,19 +570,32 @@ function renderMetAcidosisDDx(agState, uag, og) {
     const agNormal = agState === "normal";
 
     let badge, badgeTone;
-    if (agHigh) { badge = "High AG (AGMA)"; badgeTone = "warn"; }
+    if (agHigh) { badge = "High AG (AGMA)"; badgeTone = "danger"; }
     else if (agNormal) { badge = "Normal AG (NAGMA)"; badgeTone = "info"; }
-    else { badge = "輸入 Na⁺/Cl⁻ 自動分流"; badgeTone = "info"; }
+    else { badge = "輸入 Na⁺/Cl⁻ 自動分流"; badgeTone = "muted"; }
 
     // branch state classes: highlight the applicable branch, dim the other
     const agClass = agHigh ? "is-active" : (agNormal ? "is-dim" : "");
     const nagClass = agNormal ? "is-active" : (agHigh ? "is-dim" : "");
+    const pill = state => state === "on"
+        ? `<span class="ddx-pill on">✓ 符合</span>`
+        : state === "off"
+            ? `<span class="ddx-pill off">✕ 排除</span>`
+            : `<span class="ddx-pill idle">待資料</span>`;
+    const agPill = pill(agHigh ? "on" : agNormal ? "off" : "idle");
+    const nagPill = pill(agNormal ? "on" : agHigh ? "off" : "idle");
+
+    const FLAG = `<span class="ddx-flag">本例落點</span>`;
+
+    // Sub-branch highlights only fire inside a branch AG has not already excluded,
+    // otherwise the dimmed branch would still show a "本例落點" marker.
+    const agLive = !agNormal, nagLive = !agHigh;
 
     // Urine anion gap → highlight renal vs GI sub-branch within NAGMA
-    const renalHit = uag.known && uag.positive ? "ddx-hit" : "";
-    const giHit = uag.known && !uag.positive ? "ddx-hit" : "";
+    const renalHit = nagLive && uag.known && uag.positive ? "ddx-hit" : "";
+    const giHit = nagLive && uag.known && !uag.positive ? "ddx-hit" : "";
     let uagLine = "";
-    if (uag.known) {
+    if (nagLive && uag.known) {
         const dir = uag.positive
             ? "正值 → <strong>腎性 (RTA)</strong>，往下依 K⁺／urine pH／Fe<sub>HCO₃</sub> 分型"
             : "負值 → <strong>腸胃道/其他流失</strong>（腹瀉等，NH₄⁺ 排出正常）";
@@ -524,10 +603,10 @@ function renderMetAcidosisDDx(agState, uag, og) {
     }
 
     // Osmolar gap → highlight OG>10 vs OG<10 leaf within AGMA ingestions
-    const ogHighHit = og.known && og.high ? "ddx-hit" : "";
-    const ogLowHit = og.known && !og.high ? "ddx-hit" : "";
+    const ogHighHit = agLive && og.known && og.high ? "ddx-hit" : "";
+    const ogLowHit = agLive && og.known && !og.high ? "ddx-hit" : "";
     let ogLine = "";
-    if (og.known) {
+    if (agLive && og.known) {
         const dir = og.high
             ? "&gt;10 → 提示 <strong>toxic alcohol</strong>（Methanol / Ethylene glycol / Propylene glycol / Ethanol）"
             : "&lt;10 → 較不支持 toxic alcohol（考慮 Salicylates、5-oxoproline 等）";
@@ -535,7 +614,7 @@ function renderMetAcidosisDDx(agState, uag, og) {
     }
 
     const html = `
-        <div class="abg-block tone-warn">
+        <div class="abg-block tone-warn abg-ddx">
             <div class="abg-block-head">
                 <span class="abg-block-title">Metabolic acidosis 鑑別診斷 · Fig 4-2</span>
                 <span class="abg-badge tone-${badgeTone}">${badge}</span>
@@ -546,8 +625,8 @@ function renderMetAcidosisDDx(agState, uag, og) {
                 OG（osmolar gap）&gt;10 提示 toxic alcohol。
             </div>
             <div class="ddx-tree">
-                <div class="ddx-branch ${agClass}">
-                    <div class="ddx-branch-title">↑ AG — High-AG Metabolic Acidosis</div>
+                <div class="ddx-branch tone-agma ${agClass}">
+                    <div class="ddx-branch-title"><span>↑ AG — High-AG Metabolic Acidosis</span>${agPill}</div>
                     ${ogLine}
                     <ul class="ddx-list">
                         <li><span class="ddx-clue pos">⊕ ketones</span> → <strong>DKA、AKA、Starvation</strong>（Salicylates）</li>
@@ -557,19 +636,19 @@ function renderMetAcidosisDDx(agState, uag, og) {
                                 <li><span class="ddx-clue">uremia</span> → <strong>Renal failure</strong>（晚期腎衰竭）</li>
                                 <li><span class="ddx-clue pos">⊕ tox screen → Ingestions</span>
                                     <ul>
-                                        <li class="${ogHighHit}"><span class="ddx-clue">OG &gt;10</span> → Ethanol、Methanol、Ethylene glycol、Propylene glycol</li>
-                                        <li class="${ogLowHit}"><span class="ddx-clue">OG &lt;10</span> → Salicylates、5-oxoprolinuria</li>
+                                        <li class="${ogHighHit}"><span class="ddx-clue">OG &gt;10</span> → Ethanol、Methanol、Ethylene glycol、Propylene glycol${ogHighHit ? FLAG : ""}</li>
+                                        <li class="${ogLowHit}"><span class="ddx-clue">OG &lt;10</span> → Salicylates、5-oxoprolinuria${ogLowHit ? FLAG : ""}</li>
                                     </ul>
                                 </li>
                             </ul>
                         </li>
                     </ul>
                 </div>
-                <div class="ddx-branch ${nagClass}">
-                    <div class="ddx-branch-title">normal AG — Non-AG Metabolic Acidosis</div>
+                <div class="ddx-branch tone-nagma ${nagClass}">
+                    <div class="ddx-branch-title"><span>normal AG — Non-AG Metabolic Acidosis</span>${nagPill}</div>
                     ${uagLine}
                     <ul class="ddx-list">
-                        <li class="${renalHit}"><span class="ddx-clue pos">⊕ UAG（腎性 Renal causes）</span>
+                        <li class="${renalHit}"><span class="ddx-clue pos">⊕ UAG（腎性 Renal causes）</span>${renalHit ? FLAG : ""}
                             <ul>
                                 <li><span class="ddx-clue">hyperkalemia · urine pH &lt;5.3</span> → <strong>Hypoaldo RTA (Type IV)</strong></li>
                                 <li><span class="ddx-clue">hypokalemia</span>
@@ -580,7 +659,7 @@ function renderMetAcidosisDDx(agState, uag, og) {
                                 </li>
                             </ul>
                         </li>
-                        <li class="${giHit}"><span class="ddx-clue neg">⊖ UAG（腸胃道/其他，clinical hx）</span> → <strong>Diarrhea、Fistulas、Ingestions、Dilutional、Posthypocapnia</strong></li>
+                        <li class="${giHit}"><span class="ddx-clue neg">⊖ UAG（腸胃道/其他，clinical hx）</span> → <strong>Diarrhea、Fistulas、Ingestions、Dilutional、Posthypocapnia</strong>${giHit ? FLAG : ""}</li>
                     </ul>
                 </div>
             </div>
@@ -588,44 +667,46 @@ function renderMetAcidosisDDx(agState, uag, og) {
     return html;
 }
 
+// Returns { items, extra, tag } — `extra` names a further disorder revealed by
+// an over/under-shooting compensation; `tag` is the one-line compensation verdict.
 function compensationCheck(type, paco2, hco3) {
     const items = [];
     const round2 = v => fmt(v, 1);
+    let extra = null, tag = null;
 
-    if (type === "MA") {
-        const exp = 1.5 * hco3 + 8;               // Winters' formula
+    if (type === "MA" || type === "MAl") {
+        const isMA = type === "MA";
+        const exp = isMA ? 1.5 * hco3 + 8 : 40 + 0.7 * (hco3 - 24);
         const lo = exp - 2, hi = exp + 2;
-        items.push(`Winters 預期 PaCO₂ = (1.5 × HCO₃⁻) + 8 ± 2 = <strong>${round2(lo)}–${round2(hi)}</strong> mmHg`);
+        items.push(isMA
+            ? `Winters 預期 PaCO₂ = (1.5 × HCO₃⁻) + 8 ± 2 = <strong>${round2(lo)}–${round2(hi)}</strong> mmHg`
+            : `預期 PaCO₂ = 40 + 0.7 × (HCO₃⁻ − 24) = <strong>${round2(lo)}–${round2(hi)}</strong> mmHg`);
         items.push(`實測 PaCO₂ = ${round2(paco2)} mmHg`);
-        if (paco2 > hi) items.push("→ PaCO₂ 高於預期 → 併存 <strong>呼吸性酸中毒</strong>");
-        else if (paco2 < lo) items.push("→ PaCO₂ 低於預期 → 併存 <strong>呼吸性鹼中毒</strong>");
-        else items.push("→ 呼吸代償適當（單純代謝性酸中毒）");
-    } else if (type === "MAl") {
-        const exp = 40 + 0.7 * (hco3 - 24);       // expected PaCO2 rise
-        const lo = exp - 2, hi = exp + 2;
-        items.push(`預期 PaCO₂ = 40 + 0.7 × (HCO₃⁻ − 24) = <strong>${round2(lo)}–${round2(hi)}</strong> mmHg`);
-        items.push(`實測 PaCO₂ = ${round2(paco2)} mmHg`);
-        if (paco2 > hi) items.push("→ PaCO₂ 高於預期 → 併存 <strong>呼吸性酸中毒</strong>");
-        else if (paco2 < lo) items.push("→ PaCO₂ 低於預期 → 併存 <strong>呼吸性鹼中毒</strong>");
-        else items.push("→ 呼吸代償適當（單純代謝性鹼中毒）");
-    } else if (type === "RA") {
-        const d = paco2 - 40;
-        const acute = 24 + 0.1 * d;
-        const chronic = 24 + 0.35 * d;
-        items.push(`ΔPaCO₂ = ${round2(d)} mmHg`);
-        items.push(`預期 HCO₃⁻：急性 ≈ <strong>${round2(acute)}</strong>（+0.1×Δ）、慢性 ≈ <strong>${round2(chronic)}</strong>（+0.35×Δ）`);
+        if (paco2 > hi) {
+            extra = "呼吸性酸中毒"; tag = "呼吸代償不足";
+            items.push("→ PaCO₂ 高於預期 → 併存 <strong>呼吸性酸中毒</strong>");
+        } else if (paco2 < lo) {
+            extra = "呼吸性鹼中毒"; tag = "過度換氣";
+            items.push("→ PaCO₂ 低於預期 → 併存 <strong>呼吸性鹼中毒</strong>");
+        } else {
+            tag = "呼吸代償適當";
+            items.push(`→ 呼吸代償適當（單純${isMA ? "代謝性酸中毒" : "代謝性鹼中毒"}）`);
+        }
+    } else if (type === "RA" || type === "RAl") {
+        const isRA = type === "RA";
+        const d = isRA ? paco2 - 40 : 40 - paco2;
+        const acute = isRA ? 24 + 0.1 * d : 24 - 0.2 * d;
+        const chronic = isRA ? 24 + 0.35 * d : 24 - 0.4 * d;
+        items.push(`ΔPaCO₂ = ${isRA ? "" : "−"}${round2(d)} mmHg`);
+        items.push(isRA
+            ? `預期 HCO₃⁻：急性 ≈ <strong>${round2(acute)}</strong>（+0.1×Δ）、慢性 ≈ <strong>${round2(chronic)}</strong>（+0.35×Δ）`
+            : `預期 HCO₃⁻：急性 ≈ <strong>${round2(acute)}</strong>（−0.2×Δ）、慢性 ≈ <strong>${round2(chronic)}</strong>（−0.4×Δ）`);
         items.push(`實測 HCO₃⁻ = ${round2(hco3)} mEq/L`);
-        items.push(interpretRespComp(hco3, acute, chronic, false));
-    } else if (type === "RAl") {
-        const d = 40 - paco2;
-        const acute = 24 - 0.2 * d;
-        const chronic = 24 - 0.4 * d;
-        items.push(`ΔPaCO₂ = −${round2(d)} mmHg`);
-        items.push(`預期 HCO₃⁻：急性 ≈ <strong>${round2(acute)}</strong>（−0.2×Δ）、慢性 ≈ <strong>${round2(chronic)}</strong>（−0.4×Δ）`);
-        items.push(`實測 HCO₃⁻ = ${round2(hco3)} mEq/L`);
-        items.push(interpretRespComp(hco3, acute, chronic, true));
+        const r = interpretRespComp(hco3, acute, chronic, !isRA);
+        items.push(r.text);
+        extra = r.extra; tag = r.tag;
     }
-    return items;
+    return { items, extra, tag };
 }
 
 // For respiratory disorders: classify acute / chronic / mixed from measured HCO3
@@ -634,21 +715,23 @@ function interpretRespComp(hco3, acute, chronic, isAlkalosis) {
     const loExp = Math.min(acute, chronic) - tol;
     const hiExp = Math.max(acute, chronic) + tol;
     if (hco3 < loExp) {
-        return isAlkalosis
-            ? "→ HCO₃⁻ 低於預期 → 併存 <strong>代謝性酸中毒</strong>"
-            : "→ HCO₃⁻ 低於代償範圍 → 併存 <strong>代謝性酸中毒</strong>";
+        return {
+            text: "→ HCO₃⁻ 低於代償範圍 → 併存 <strong>代謝性酸中毒</strong>",
+            extra: "代謝性酸中毒", tag: "代償不符"
+        };
     }
     if (hco3 > hiExp) {
-        return isAlkalosis
-            ? "→ HCO₃⁻ 高於代償範圍 → 併存 <strong>代謝性鹼中毒</strong>"
-            : "→ HCO₃⁻ 高於預期 → 併存 <strong>代謝性鹼中毒</strong>";
+        return {
+            text: "→ HCO₃⁻ 高於代償範圍 → 併存 <strong>代謝性鹼中毒</strong>",
+            extra: "代謝性鹼中毒", tag: "代償不符"
+        };
     }
     // within range — determine acute vs chronic
     if (Math.abs(hco3 - acute) <= tol && Math.abs(hco3 - chronic) > tol)
-        return "→ 符合 <strong>急性 (acute)</strong> 代償";
+        return { text: "→ 符合 <strong>急性 (acute)</strong> 代償", extra: null, tag: "急性 acute" };
     if (Math.abs(hco3 - chronic) <= tol && Math.abs(hco3 - acute) > tol)
-        return "→ 符合 <strong>慢性 (chronic，已代償)</strong>";
-    return "→ 介於急慢性之間 → 可能為 <strong>acute-on-chronic</strong>";
+        return { text: "→ 符合 <strong>慢性 (chronic，已代償)</strong>", extra: null, tag: "慢性 chronic" };
+    return { text: "→ 介於急慢性之間 → 可能為 <strong>acute-on-chronic</strong>", extra: null, tag: "acute-on-chronic" };
 }
 
 // ---- Oxygenation / respiratory failure workup (Figure 2-5) ----------------
@@ -661,20 +744,37 @@ function analyzeOxygenation(pao2, fio2Input, paco2, age) {
     const expectedAa = isFinite(age) ? (age / 4 + 4) : 15;    // room-air normal (approx)
     const aaHigh = aa > expectedAa + (roomAir ? 0 : 10);      // loosen threshold on supplemental O2
     const highCO2 = paco2 > 45;
+    const hypoxemic = pao2 < 60;
 
     const blocks = [];
+
+    // ---- Headline verdict ----
+    let oMain, oTone;
+    if (hypoxemic && highCO2) { oMain = "Type I + II 呼吸衰竭（低血氧併換氣衰竭）"; oTone = "danger"; }
+    else if (highCO2) { oMain = "Type II 呼吸衰竭（高碳酸血症型）"; oTone = "danger"; }
+    else if (hypoxemic) { oMain = "Type I 呼吸衰竭（低血氧型）"; oTone = "danger"; }
+    else if (aaHigh) { oMain = "尚未達呼吸衰竭，但氣體交換異常"; oTone = "warn"; }
+    else { oMain = "氧合與氣體交換大致正常"; oTone = "normal"; }
+    const oSub = `A–a gradient ${aaHigh ? "升高" : "正常"} · P/F ${fmt(pf, 0)}`;
+    blocks.push(verdict(oTone, oMain, oSub, `PaO₂ ${fmt(pao2, 0)}`));
+
+    // ---- Value gauges ----
+    const aaMax = Math.max(60, Math.ceil(aa / 20) * 20 + 20);
+    blocks.push(`<div class="abg-gauges">${[
+        gauge("PaO₂", pao2, " mmHg", 30, 300, 60, 300, 0),
+        gauge("A–a gradient", aa, " mmHg", 0, aaMax, 0, Math.round(expectedAa + (roomAir ? 0 : 10)), 0),
+        gauge("P/F ratio", pf, "", 0, 500, 300, 500, 0),
+    ].join("")}</div>`);
 
     // Computed values chips
     const chips = [
         `PAO₂ <strong>${fmt(pAO2)}</strong> mmHg`,
-        `A–a gradient <strong>${fmt(aa)}</strong> mmHg（預期 ≤ ${fmt(expectedAa)}${roomAir ? "" : "，供氧下上調"}）`,
-        `P/F ratio <strong>${fmt(pf, 0)}</strong>`,
-        `FiO₂ ${fmt(fio2 * 100, 0)}%`
+        `A–a 預期 ≤ <strong>${fmt(expectedAa)}</strong>${roomAir ? "（room air）" : "（供氧下上調 +10）"}`,
+        `FiO₂ <strong>${fmt(fio2 * 100, 0)}%</strong>`
     ];
     blocks.push(`<div class="abg-values">${chips.map(c => `<span class="abg-chip">${c}</span>`).join("")}</div>`);
 
     // Respiratory failure type
-    const hypoxemic = pao2 < 60;
     let typeItems = [];
     if (highCO2) typeItems.push("PaCO₂ > 45 → <strong>Type II（高碳酸血症型）呼吸衰竭</strong>");
     if (hypoxemic && !highCO2) typeItems.push("PaO₂ < 60 且 PaCO₂ 不高 → <strong>Type I（低血氧型）呼吸衰竭</strong>");
