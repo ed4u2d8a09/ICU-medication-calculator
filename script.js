@@ -198,6 +198,24 @@ const drugsData = [
     weightBased: true
   },
   {
+    category: "Diuretics",
+    name: "Furosemide",
+    class: "loop diuretic",
+    doseText: "80 mg IV bolus，續 5–40 mg/hr infusion",
+    prepText: "10 amps (200mg) in 0.9% NaCl 200ml",
+    unit: "mg/h",
+    doseMin: 5, doseMax: 40,
+    concentration: 1,
+    concentrationUnit: "mg/ml",
+    weightBased: false,
+    note: "使用時機：massive fluid overload（大量體液過載）。先給 80 mg IV bolus，再接續 infusion。",
+    noteList: [
+      "eGFR ≥ 30 mL/min/1.73 m²：infusion 從 5 mg/hr 開始。若反應不佳（urine output 未達 ≥ 100 mL/hr），再補一次 bolus 並將速率提高到 10 mg/hr；之後可視需要繼續上調，最高 40 mg/hr。",
+      "eGFR < 30 mL/min/1.73 m²：infusion 從 20 mg/hr 開始。若反應不佳，再補一次 bolus 並將速率提高到 40 mg/hr。",
+      "反應目標：urine output ≥ 100 mL/hr。"
+    ]
+  },
+  {
     category: "Corticosteroids",
     name: "Hydrocortisone",
     class: "glucocorticoid",
