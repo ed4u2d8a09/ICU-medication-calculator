@@ -292,6 +292,10 @@ function renderDrugs() {
 
     const categories = [...new Set(drugsData.map(d => d.category))];
 
+    // A one-drug category would otherwise claim a full row and leave the rest of
+    // it empty, so consecutive one-drug categories share a row side by side.
+    let compactRow = null;
+
     categories.forEach(category => {
         const catDrugs = drugsData.filter(d => d.category === category);
         
@@ -384,7 +388,19 @@ function renderDrugs() {
         });
 
         catSection.appendChild(grid);
-        container.appendChild(catSection);
+
+        if (catDrugs.length === 1) {
+            if (!compactRow) {
+                compactRow = document.createElement('div');
+                compactRow.className = 'category-row';
+                container.appendChild(compactRow);
+            }
+            catSection.className = 'category-col';
+            compactRow.appendChild(catSection);
+        } else {
+            compactRow = null;
+            container.appendChild(catSection);
+        }
     });
 
     // Add listeners to concentration inputs

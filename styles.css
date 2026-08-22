@@ -194,6 +194,19 @@ h1 {
     margin-top: 0;
 }
 
+/* Shared row for consecutive one-drug categories */
+.category-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    align-items: start;
+    gap: var(--space-3);
+    margin-top: var(--space-6);
+}
+
+.category-row .category-header {
+    margin-top: 0;
+}
+
 /* start, not stretch: a short card should not inherit its tallest neighbour */
 .drug-grid {
     display: grid;
