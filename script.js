@@ -419,7 +419,7 @@ function gauge(label, value, unit, min, max, lo, hi, digits) {
 }
 
 // ---- Acid–base interpretation ---------------------------------------------
-function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun) {
+function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun, k, uPh, feHco3) {
     const highCO2 = paco2 > 45, lowCO2 = paco2 < 35;
     const highHCO3 = hco3 > 26, lowHCO3 = hco3 < 22;
 
@@ -555,17 +555,84 @@ function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glu
 
     // Metabolic acidosis differential diagnosis (Fig 4-2)
     if (uniq.includes("MA") || agState === "high") {
-        blocks.push(renderMetAcidosisDDx(agState, uag, og));
+        blocks.push(renderMetAcidosisDDx(agState, uag, og, resolveRTA(k, uPh, feHco3)));
     }
 
     return blocks.join("");
 }
 
+// Renal (⊕ UAG) sub-typing — Figure 4-2. Serum K splits Type IV from the
+// hypokalaemic pair; Fe_HCO3 is what separates Type I from Type II, so without
+// it the tree stops at "hypokalemia" rather than guessing (urine pH is raised
+// in both distal RTA and proximal RTA above its bicarbonate threshold).
+function resolveRTA(k, uPh, feHco3) {
+    const hasK = isFinite(k);
+    if (!hasK && !isFinite(uPh) && !isFinite(feHco3)) return { known: false };
+
+    const hyperK = hasK && k > 5.0;
+    const hypoK = hasK && k < 3.5;
+    let type = null, need = null;
+
+    if (hyperK) {
+        type = "IV";
+    } else if (hypoK) {
+        if (isFinite(feHco3)) {
+            if (feHco3 > 15) type = "II";
+            else if (feHco3 < 3) type = "I";
+            else need = "Fe<sub>HCO₃</sub> 落在 3–15% 的灰帶，無法明確分型";
+        } else {
+            need = "再測 <strong>Fe<sub>HCO₃</sub></strong> 才能區分 Type I（&lt;3%）與 Type II（&gt;15%）";
+        }
+    } else if (hasK) {
+        need = "K⁺ 在正常範圍（3.5–5.0），不符典型 RTA 分型，請結合臨床";
+    } else {
+        need = "再測 <strong>血鉀</strong> 才能開始分型";
+    }
+
+    return { known: true, k, uPh, feHco3, hasK, hyperK, hypoK, type, need };
+}
+
+// One-line derivation of the RTA type, shown as a 計算推論 box.
+function rtaLine(rta) {
+    if (!rta.known) return "";
+    const bits = [];
+    if (rta.hasK) {
+        const tag = rta.hyperK ? "&gt;5.0 高血鉀" : rta.hypoK ? "&lt;3.5 低血鉀" : "3.5–5.0 正常";
+        bits.push(`K⁺ <strong>${fmt(rta.k)}</strong> mEq/L（${tag}）`);
+    }
+    if (isFinite(rta.uPh)) {
+        bits.push(`urine pH <strong>${fmt(rta.uPh)}</strong>（${rta.uPh > 5.3 ? "&gt;5.3" : "&lt;5.3"}）`);
+    }
+    if (isFinite(rta.feHco3)) {
+        bits.push(`Fe<sub>HCO₃</sub> <strong>${fmt(rta.feHco3)}</strong>%`);
+    }
+
+    const NAME = {
+        IV: "Hypoaldosteronism RTA (Type IV)",
+        I: "Distal RTA (Type I)",
+        II: "Proximal RTA (Type II)",
+    };
+    let tail;
+    if (rta.type) {
+        tail = `→ <strong>${NAME[rta.type]}</strong>`;
+        // urine pH that argues against the split the potassium made
+        if (rta.type === "IV" && isFinite(rta.uPh) && rta.uPh > 5.3)
+            tail += "（註：urine pH &gt;5.3 與典型 Type IV 不符，請一併考慮 distal RTA）";
+        if (rta.type === "I" && isFinite(rta.uPh) && rta.uPh <= 5.3)
+            tail += "（註：urine pH &le;5.3 與典型 Type I 不符）";
+    } else {
+        tail = `→ ${rta.need}`;
+    }
+
+    return `<div class="ddx-uag"><span class="ddx-uag-tag">計算推論</span><br>${bits.join(" · ")}${bits.length ? " " : ""}${tail}</div>`;
+}
+
 // Metabolic acidosis differential tree — Figure 4-2, Approach to metabolic acidosis
-function renderMetAcidosisDDx(agState, uag, og) {
+function renderMetAcidosisDDx(agState, uag, og, rta) {
     // agState: "high" | "normal" | "unknown"
     uag = uag || { known: false };
     og = og || { known: false };
+    rta = rta || { known: false };
     const agHigh = agState === "high";
     const agNormal = agState === "normal";
 
@@ -585,12 +652,22 @@ function renderMetAcidosisDDx(agState, uag, og) {
     const FLAG = `<span class="ddx-flag">最可能</span>`;
 
     // Sub-branch highlights only fire inside a branch AG has not already excluded,
-    // otherwise the dimmed branch would still show a "本例落點" marker.
+    // otherwise the dimmed branch would still show a "最可能" marker.
     const agLive = !agNormal, nagLive = !agHigh;
 
-    // Urine anion gap → highlight renal vs GI sub-branch within NAGMA
-    const renalHit = nagLive && uag.known && uag.positive ? "ddx-hit" : "";
+    // Urine anion gap → renal vs GI sub-branch within NAGMA
+    const renalLive = nagLive && uag.known && uag.positive;
     const giHit = nagLive && uag.known && !uag.positive ? "ddx-hit" : "";
+
+    // Inside the renal arm the typing can go two levels deeper; the flag belongs
+    // on the deepest node the data actually resolves, not on every node above it.
+    const rtaLive = renalLive && rta.known;
+    const t4Hit = rtaLive && rta.type === "IV" ? "ddx-hit" : "";
+    const t1Hit = rtaLive && rta.type === "I" ? "ddx-hit" : "";
+    const t2Hit = rtaLive && rta.type === "II" ? "ddx-hit" : "";
+    // hypokalaemia narrows it to the Type I / II pair but cannot pick between them
+    const hypoKHit = rtaLive && rta.hypoK && !rta.type ? "ddx-hit" : "";
+    const renalHit = renalLive && !(t4Hit || t1Hit || t2Hit || hypoKHit) ? "ddx-hit" : "";
     let uagLine = "";
     if (nagLive && uag.known) {
         const dir = uag.positive
@@ -619,7 +696,7 @@ function renderMetAcidosisDDx(agState, uag, og) {
     ].filter(Boolean).join(" ");
     const nagClass = [
         agNormal ? "is-active" : (agHigh ? "is-dim" : ""),
-        (renalHit || giHit) ? "has-top" : ""
+        (renalHit || giHit || t4Hit || t1Hit || t2Hit || hypoKHit) ? "has-top" : ""
     ].filter(Boolean).join(" ");
 
     const html = `
@@ -658,12 +735,13 @@ function renderMetAcidosisDDx(agState, uag, og) {
                     ${uagLine}
                     <ul class="ddx-list">
                         <li class="${renalHit}"><span class="ddx-clue pos">⊕ UAG（腎性 Renal causes）</span>${renalHit ? FLAG : ""}
+                            ${rtaLive ? rtaLine(rta) : ""}
                             <ul>
-                                <li><span class="ddx-clue">hyperkalemia · urine pH &lt;5.3</span> → <strong>Hypoaldo RTA (Type IV)</strong></li>
-                                <li><span class="ddx-clue">hypokalemia</span>
+                                <li class="${t4Hit}"><span class="ddx-clue">hyperkalemia · urine pH &lt;5.3</span> → <strong>Hypoaldo RTA (Type IV)</strong>${t4Hit ? FLAG : ""}</li>
+                                <li class="${hypoKHit}"><span class="ddx-clue">hypokalemia</span>${hypoKHit ? FLAG : ""}
                                     <ul>
-                                        <li><span class="ddx-clue">Fe<sub>HCO₃</sub> &lt;3% · urine pH &gt;5.3</span> → <strong>Distal RTA (Type I)</strong></li>
-                                        <li><span class="ddx-clue">Fe<sub>HCO₃</sub> &gt;15% · urine pH 變動</span> → <strong>Proximal RTA (Type II)</strong></li>
+                                        <li class="${t1Hit}"><span class="ddx-clue">Fe<sub>HCO₃</sub> &lt;3% · urine pH &gt;5.3</span> → <strong>Distal RTA (Type I)</strong>${t1Hit ? FLAG : ""}</li>
+                                        <li class="${t2Hit}"><span class="ddx-clue">Fe<sub>HCO₃</sub> &gt;15% · urine pH 變動</span> → <strong>Proximal RTA (Type II)</strong>${t2Hit ? FLAG : ""}</li>
                                     </ul>
                                 </li>
                             </ul>
@@ -847,19 +925,22 @@ function runABG() {
     const age = num("abg-age");
     const na = num("abg-na");
     const cl = num("abg-cl");
+    const k = num("abg-k");
     const uNa = num("abg-una");
     const uCl = num("abg-ucl");
     const uK = num("abg-uk");
     const measuredOsm = num("abg-osm");
     const glucose = num("abg-glu");
     const bun = num("abg-bun");
+    const uPh = num("abg-uph");
+    const feHco3 = num("abg-fehco3");
 
     let html = "";
 
     const hasAB = isFinite(ph) && isFinite(paco2) && isFinite(hco3);
     if (hasAB) {
         html += `<div class="abg-section-title">酸鹼分析 · Acid–Base</div>`;
-        html += analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun);
+        html += analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun, k, uPh, feHco3);
     }
 
     const hasOxy = isFinite(pao2) && isFinite(fio2) && isFinite(paco2);
@@ -879,7 +960,7 @@ function runABG() {
     }
 }
 
-const ABG_INPUT_IDS = ["abg-ph", "abg-paco2", "abg-hco3", "abg-pao2", "abg-fio2", "abg-age", "abg-na", "abg-cl", "abg-una", "abg-ucl", "abg-uk", "abg-osm", "abg-glu", "abg-bun"];
+const ABG_INPUT_IDS = ["abg-ph", "abg-paco2", "abg-hco3", "abg-pao2", "abg-fio2", "abg-age", "abg-na", "abg-cl", "abg-k", "abg-una", "abg-ucl", "abg-uk", "abg-uph", "abg-fehco3", "abg-osm", "abg-glu", "abg-bun"];
 
 function clearABG() {
     ABG_INPUT_IDS.forEach(id => {

@@ -944,6 +944,13 @@ h1 {
     font-weight: 500;
 }
 
+/* Nested inside a tree node the box sits in the list's own indent, not the
+   branch gutter it uses at the top level. */
+.ddx-list .ddx-uag {
+    margin: 6px 0 8px;
+    font-size: 0.82rem;
+}
+
 /* The derivation that picked the answer — labelled and kept at full contrast */
 .ddx-uag-tag {
     display: inline-block;
