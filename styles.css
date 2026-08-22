@@ -918,39 +918,67 @@ h1 {
     font-family: var(--font-ui);
     font-size: 0.78rem;
     font-weight: 600;
-    color: var(--color-secondary);
-    background: rgba(37, 99, 235, 0.1);
+    color: var(--color-muted-text);
+    background: var(--color-muted-surface);
+    border: 1px solid var(--color-border);
     padding: 1px 7px;
     border-radius: 999px;
 }
 
-.ddx-clue.pos { color: var(--color-accent-strong); background: rgba(5, 150, 105, 0.12); }
-.ddx-clue.neg { color: #b45309; background: rgba(217, 119, 6, 0.14); }
+/* ⊕ / ⊖ keep only a hint of tint — colour is reserved for the answer */
+.ddx-clue.pos { color: #3f7a63; }
+.ddx-clue.neg { color: #8a6a3d; }
 
 .ddx-uag {
     font-size: 0.82rem;
     line-height: 1.5;
     color: var(--color-foreground);
-    background: var(--b-soft);
-    border: 1px solid var(--b-line);
+    background: var(--color-muted-surface);
+    border: 1px solid var(--color-border);
     border-left: 4px solid var(--b-color);
     border-radius: var(--radius-sm);
     padding: var(--space-2) var(--space-3);
     margin: 0 var(--space-4) var(--space-3);
 }
 
+/* Evidence line: only the measured number is coloured, not the prose */
+.ddx-uag { color: var(--color-muted-text); }
+
 .ddx-uag strong { color: var(--b-color); font-weight: 700; }
+
+/* Once one leaf wins, the rest of the branch recedes to plain grey text.
+   :has() keeps the winner's ancestors out of the fade; without it they mute
+   too, which is cosmetic only — the winner carries its own colour. */
+.ddx-branch.has-top .ddx-list li:not(.ddx-hit):not(:has(.ddx-hit)) {
+    color: var(--color-muted-text);
+    opacity: 0.6;
+}
+
+.ddx-branch.has-top .ddx-list li:not(.ddx-hit):not(:has(.ddx-hit)) strong {
+    color: var(--color-muted-text);
+    font-weight: 600;
+}
+
+.ddx-branch.has-top .ddx-list li:not(.ddx-hit) > .ddx-clue {
+    color: var(--color-muted-text);
+    background: var(--color-muted-surface);
+}
 
 /* The exact leaf this patient's numbers land on */
 .ddx-list li.ddx-hit {
+    color: var(--color-foreground);
     background: var(--b-hit);
     border: 1px solid var(--b-line);
     border-left: 4px solid var(--b-color);
     border-radius: var(--radius-sm);
-    padding: 6px var(--space-3);
-    margin: 2px 0;
-    font-weight: 600;
+    padding: 7px var(--space-3);
+    margin: 4px 0;
+    font-weight: 700;
+    opacity: 1;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
 }
+
+.ddx-list li.ddx-hit strong { color: var(--b-color); font-weight: 700; }
 
 .ddx-list li.ddx-hit > .ddx-clue {
     color: #ffffff;

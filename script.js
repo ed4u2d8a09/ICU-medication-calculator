@@ -574,9 +574,6 @@ function renderMetAcidosisDDx(agState, uag, og) {
     else if (agNormal) { badge = "Normal AG (NAGMA)"; badgeTone = "info"; }
     else { badge = "輸入 Na⁺/Cl⁻ 自動分流"; badgeTone = "muted"; }
 
-    // branch state classes: highlight the applicable branch, dim the other
-    const agClass = agHigh ? "is-active" : (agNormal ? "is-dim" : "");
-    const nagClass = agNormal ? "is-active" : (agHigh ? "is-dim" : "");
     const pill = state => state === "on"
         ? `<span class="ddx-pill on">✓ 符合</span>`
         : state === "off"
@@ -585,7 +582,7 @@ function renderMetAcidosisDDx(agState, uag, og) {
     const agPill = pill(agHigh ? "on" : agNormal ? "off" : "idle");
     const nagPill = pill(agNormal ? "on" : agHigh ? "off" : "idle");
 
-    const FLAG = `<span class="ddx-flag">本例落點</span>`;
+    const FLAG = `<span class="ddx-flag">最可能</span>`;
 
     // Sub-branch highlights only fire inside a branch AG has not already excluded,
     // otherwise the dimmed branch would still show a "本例落點" marker.
@@ -612,6 +609,18 @@ function renderMetAcidosisDDx(agState, uag, og) {
             : "&lt;10 → 較不支持 toxic alcohol（考慮 Salicylates、5-oxoproline 等）";
         ogLine = `<div class="ddx-uag">Osmolar gap = 實測 − 計算(2×Na + Glu/18 + BUN/2.8 = ${fmt(og.calc)}) = <strong>${fmt(og.value)}</strong> mOsm/kg → ${dir}</div>`;
     }
+
+    // branch state classes: highlight the applicable branch, dim the other.
+    // `has-top` means one leaf won outright — everything else in that branch
+    // fades back so the answer is the only thing carrying colour.
+    const agClass = [
+        agHigh ? "is-active" : (agNormal ? "is-dim" : ""),
+        (ogHighHit || ogLowHit) ? "has-top" : ""
+    ].filter(Boolean).join(" ");
+    const nagClass = [
+        agNormal ? "is-active" : (agHigh ? "is-dim" : ""),
+        (renalHit || giHit) ? "has-top" : ""
+    ].filter(Boolean).join(" ");
 
     const html = `
         <div class="abg-block tone-warn abg-ddx">
