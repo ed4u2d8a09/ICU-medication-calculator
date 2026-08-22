@@ -377,7 +377,7 @@ function renderDrugs() {
                     </div>
                 </div>
                 <div class="drug-details">
-                    <div class="dose-line"><strong>Dose</strong><span>${drug.doseText}</span></div>
+                    ${drug.bolus ? '' : `<div class="dose-line"><strong>Dose</strong><span>${drug.doseText}</span></div>`}
                     <div class="prep-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>${drug.prepText}</span></div>
                     ${concInputHtml}
                     ${noteHtml}
