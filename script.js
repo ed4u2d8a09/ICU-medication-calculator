@@ -338,14 +338,15 @@ function renderDrugs() {
 
             if (drug.bolus) {
                 rateDisplayHtml = `<span class="rate-value rate-fixed" id="rate-${index}">${drug.bolusText}</span>`;
+                concInputHtml = '';
             } else if (drug.fixedRateText) {
                 rateDisplayHtml = `<span class="rate-value rate-fixed" id="rate-${index}">${drug.fixedRateText}</span>`;
                 // Disable concentration input for fixed rate drugs to avoid confusion
                 concInputHtml = `
                     <div class="concentration-input">
-                        <label>Conc:</label>
-                        <input type="number" value="${drug.concentration}" disabled style="opacity: 0.5;">
-                        <span>${drug.concentrationUnit}</span>
+                        <label>濃度</label>
+                        <input type="number" value="${drug.concentration}" disabled aria-label="${drug.name} 濃度（固定）">
+                        <span class="conc-unit">${drug.concentrationUnit}</span>
                     </div>
                 `;
             } else {
@@ -354,9 +355,9 @@ function renderDrugs() {
                                    <span class="rate-unit">ml/hr</span>`;
                 concInputHtml = `
                     <div class="concentration-input">
-                        <label for="${concId}">Conc:</label>
-                        <input type="number" id="${concId}" value="${drug.concentration}" step="0.1">
-                        <span>${drug.concentrationUnit}</span>
+                        <label for="${concId}">濃度</label>
+                        <input type="number" id="${concId}" value="${drug.concentration}" step="0.1" inputmode="decimal">
+                        <span class="conc-unit">${drug.concentrationUnit}</span>
                     </div>
                 `;
             }
@@ -366,16 +367,16 @@ function renderDrugs() {
                     <span class="drug-name">${drug.name}</span>
                     <span class="drug-class">${drug.class}</span>
                 </div>
-                <div class="drug-details">
-                    <div><strong>Dose:</strong> ${drug.doseText}</div>
-                    <div class="prep-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>${drug.prepText}</span></div>
-                    ${noteHtml}
-                    ${concInputHtml}
-                </div>
                 <div class="calculation-result">
                     <div class="rate-display">
                         ${rateDisplayHtml}
                     </div>
+                </div>
+                <div class="drug-details">
+                    <div class="dose-line"><strong>Dose</strong><span>${drug.doseText}</span></div>
+                    <div class="prep-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>${drug.prepText}</span></div>
+                    ${concInputHtml}
+                    ${noteHtml}
                 </div>
             `;
             
