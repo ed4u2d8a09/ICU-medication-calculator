@@ -211,7 +211,13 @@ h1 {
     background: linear-gradient(90deg, var(--color-border), transparent);
 }
 
-.category-header:first-child {
+/* Every header is the first child of its own section wrapper, so this must be
+   scoped to the first section in the list -- otherwise it zeroes them all. */
+.drug-list > :first-child {
+    margin-top: 0;
+}
+
+.drug-list > :first-child .category-header {
     margin-top: 0;
 }
 
