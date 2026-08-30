@@ -366,8 +366,145 @@ h1 {
     flex: none;
     width: 14px;
     height: 14px;
-    margin-top: 2px;
     color: var(--color-secondary);
+}
+
+/* The icon is the affordance for editing the recipe, so give it a real hit
+   area without letting it bulk out the row. */
+.prep-edit-btn {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin: -2px 0 -2px -3px;
+    padding: 0;
+    border: 1px solid transparent;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--color-secondary);
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.prep-edit-btn:hover {
+    background: var(--color-surface);
+    border-color: var(--color-border-strong);
+}
+
+.prep-edit-btn:focus-visible {
+    outline: 2px solid var(--color-secondary);
+    outline-offset: 1px;
+}
+
+.prep-text {
+    padding-top: 1px;
+}
+
+.prep-custom-tag {
+    flex: none;
+    margin-left: auto;
+    align-self: flex-start;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: var(--color-accent-strong);
+    background: rgba(5, 150, 105, 0.12);
+    border-radius: 999px;
+    padding: 1px 6px;
+}
+
+.prep-info.is-editing {
+    display: block;
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-strong);
+    padding: var(--space-2);
+}
+
+.prep-editor {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+}
+
+.prep-editor-field {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.prep-editor-field > span:first-child {
+    flex: none;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--color-muted-text);
+    white-space: nowrap;
+}
+
+.prep-editor-field input {
+    flex: 1;
+    min-width: 0;
+    font-family: inherit;
+    font-size: 0.8rem;
+    color: var(--color-foreground);
+    background: var(--color-surface);
+    border: 1.5px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    padding: 4px var(--space-2);
+}
+
+.prep-editor-field input:focus {
+    outline: none;
+    border-color: var(--color-secondary);
+}
+
+.prep-editor-conc input {
+    flex: none;
+    width: 84px;
+}
+
+.prep-editor-unit {
+    font-size: 0.72rem;
+    color: var(--color-muted-text);
+}
+
+.prep-editor-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.prep-editor-actions button {
+    font-family: inherit;
+    font-size: 0.74rem;
+    font-weight: 700;
+    border-radius: var(--radius-sm);
+    border: 1.5px solid var(--color-border-strong);
+    background: var(--color-surface);
+    color: var(--color-muted-text);
+    padding: 4px var(--space-3);
+    cursor: pointer;
+}
+
+.prep-editor-actions button:hover {
+    border-color: var(--color-secondary);
+    color: var(--color-secondary);
+}
+
+.prep-editor-actions .prep-editor-save {
+    border-color: var(--color-accent);
+    background: var(--color-accent);
+    color: #fff;
+}
+
+.prep-editor-actions .prep-editor-save:hover {
+    border-color: var(--color-accent-strong);
+    background: var(--color-accent-strong);
+    color: #fff;
+}
+
+.prep-editor-reset {
+    margin-left: auto;
 }
 
 .drug-note {

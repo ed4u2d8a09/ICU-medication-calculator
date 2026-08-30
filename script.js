@@ -224,7 +224,7 @@ const drugsData = [
     name: "Hydrocortisone",
     class: "glucocorticoid",
     doseText: "50 mg Q6H",
-    prepText: "IV push，不需稀釋（每日總量 200 mg）",
+    prepText: "不需稀釋（每日總量 200 mg）",
     bolus: true,
     bolusText: "50 mg Q6H",
     note: "Norepinephrine 或 Epinephrine 劑量 ≥ 0.25 μg/kg/min 時考慮使用。",
@@ -281,6 +281,177 @@ function calculateDoseRate(drug, weight, dose, overrideConc) {
 
     const rate = (dose * factor) / conc;
     return rate < 10 ? rate.toFixed(1) : Math.round(rate);
+}
+
+/* -------------------------------------------------------------------------
+ *  Custom dilution recipes
+ *  A drug can be mixed differently from ward to ward, so the pencil on the
+ *  prep row opens an editor for the recipe (and, where it drives the maths,
+ *  the resulting concentration). Edits are kept in localStorage so the next
+ *  visit starts from what was entered last time.
+ * ---------------------------------------------------------------------- */
+const PREP_STORE_KEY = 'icu-calc-prep-overrides';
+
+const PREP_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>';
+
+// Concentration only matters where it actually drives a rate.
+function prepHasConc(drug) {
+    return !drug.bolus && !drug.fixedRateText;
+}
+
+function loadPrepOverrides() {
+    try {
+        return JSON.parse(localStorage.getItem(PREP_STORE_KEY)) || {};
+    } catch (e) {
+        return {};
+    }
+}
+
+function savePrepOverride(drug) {
+    const all = loadPrepOverrides();
+    const isDefault = drug.prepText === drug.defaultPrepText &&
+                      drug.concentration === drug.defaultConcentration;
+    if (isDefault) {
+        delete all[drug.name];
+    } else {
+        all[drug.name] = { prepText: drug.prepText, concentration: drug.concentration };
+    }
+    try {
+        localStorage.setItem(PREP_STORE_KEY, JSON.stringify(all));
+    } catch (e) {
+        /* private mode / quota — the edit still applies for this session */
+    }
+}
+
+// Remember the shipped recipe so "還原預設" has something to go back to, then
+// lay any saved edit on top.
+function applyPrepOverrides() {
+    const saved = loadPrepOverrides();
+    drugsData.forEach(drug => {
+        // Capture once: a second pass would bank an override as the default.
+        if (drug.defaultPrepText === undefined) {
+            drug.defaultPrepText = drug.prepText;
+            drug.defaultConcentration = drug.concentration;
+        }
+
+        const o = saved[drug.name];
+        if (!o) return;
+        if (typeof o.prepText === 'string' && o.prepText.trim()) drug.prepText = o.prepText.trim();
+        if (prepHasConc(drug) && typeof o.concentration === 'number' && o.concentration > 0) {
+            drug.concentration = o.concentration;
+        }
+    });
+}
+
+function escapeAttr(text) {
+    return String(text).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function prepRowHtml(drug, index) {
+    const edited = drug.prepText !== drug.defaultPrepText ||
+                   drug.concentration !== drug.defaultConcentration;
+    return `<button type="button" class="prep-edit-btn" data-index="${index}" title="編輯配置方式" aria-label="編輯 ${escapeAttr(drug.name)} 的配置方式">${PREP_ICON}</button>` +
+           `<span class="prep-text">${escapeAttr(drug.prepText)}</span>` +
+           (edited ? '<span class="prep-custom-tag">自訂</span>' : '');
+}
+
+function prepEditorHtml(drug, index) {
+    const concField = prepHasConc(drug) ? `
+        <label class="prep-editor-field prep-editor-conc">
+            <span>濃度</span>
+            <input type="number" step="0.1" inputmode="decimal" value="${drug.concentration}" data-role="conc">
+            <span class="prep-editor-unit">${drug.concentrationUnit}</span>
+        </label>` : '';
+    return `
+        <form class="prep-editor" data-index="${index}">
+            <label class="prep-editor-field">
+                <span>配置方式</span>
+                <input type="text" value="${escapeAttr(drug.prepText)}" data-role="text" autocomplete="off">
+            </label>
+            ${concField}
+            <div class="prep-editor-actions">
+                <button type="submit" class="prep-editor-save">儲存</button>
+                <button type="button" class="prep-editor-cancel" data-action="cancel">取消</button>
+                <button type="button" class="prep-editor-reset" data-action="reset">還原預設</button>
+            </div>
+        </form>`;
+}
+
+function closePrepEditor(row, index) {
+    row.classList.remove('is-editing');
+    row.innerHTML = prepRowHtml(drugsData[index], index);
+}
+
+function openPrepEditor(row, index) {
+    row.classList.add('is-editing');
+    row.innerHTML = prepEditorHtml(drugsData[index], index);
+    const first = row.querySelector('input[data-role="text"]');
+    if (first) {
+        first.focus();
+        first.select();
+    }
+}
+
+// Push a saved recipe back into the card without rebuilding the whole list,
+// so concentrations typed on other cards survive the edit.
+function commitPrep(row, index, prepText, conc) {
+    const drug = drugsData[index];
+    if (prepText && prepText.trim()) drug.prepText = prepText.trim();
+    if (prepHasConc(drug) && conc > 0) drug.concentration = conc;
+
+    savePrepOverride(drug);
+    closePrepEditor(row, index);
+
+    const concInput = document.getElementById(`conc-${index}`);
+    if (concInput) concInput.value = drug.concentration;
+
+    const weightInput = document.getElementById('weight');
+    updateSpecificDrug(index, drug, weightInput ? weightInput.value : 60, drug.concentration);
+}
+
+function initPrepEditing() {
+    const container = document.getElementById('drug-list');
+    if (!container) return;
+
+    container.addEventListener('click', (e) => {
+        const openBtn = e.target.closest('.prep-edit-btn');
+        if (openBtn) {
+            openPrepEditor(openBtn.closest('.prep-info'), Number(openBtn.dataset.index));
+            return;
+        }
+
+        const actionBtn = e.target.closest('.prep-editor [data-action]');
+        if (!actionBtn) return;
+        const form = actionBtn.closest('.prep-editor');
+        const row = form.closest('.prep-info');
+        const index = Number(form.dataset.index);
+
+        if (actionBtn.dataset.action === 'cancel') {
+            closePrepEditor(row, index);
+        } else {
+            const drug = drugsData[index];
+            commitPrep(row, index, drug.defaultPrepText, drug.defaultConcentration);
+        }
+    });
+
+    container.addEventListener('submit', (e) => {
+        const form = e.target.closest('.prep-editor');
+        if (!form) return;
+        e.preventDefault();
+        const row = form.closest('.prep-info');
+        const index = Number(form.dataset.index);
+        const concField = form.querySelector('input[data-role="conc"]');
+        commitPrep(row, index,
+            form.querySelector('input[data-role="text"]').value,
+            concField ? parseFloat(concField.value) : NaN);
+    });
+
+    container.addEventListener('keydown', (e) => {
+        if (e.key !== 'Escape') return;
+        const form = e.target.closest('.prep-editor');
+        if (!form) return;
+        closePrepEditor(form.closest('.prep-info'), Number(form.dataset.index));
+    });
 }
 
 function renderDrugs() {
@@ -378,7 +549,7 @@ function renderDrugs() {
                 </div>
                 <div class="drug-details">
                     ${drug.bolus ? '' : `<div class="dose-line"><strong>Dose</strong><span>${drug.doseText}</span></div>`}
-                    <div class="prep-info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg><span>${drug.prepText}</span></div>
+                    <div class="prep-info">${prepRowHtml(drug, index)}</div>
                     ${concInputHtml}
                     ${noteHtml}
                 </div>
@@ -1123,7 +1294,9 @@ function init() {
         });
     });
 
+    applyPrepOverrides();
     renderDrugs();
+    initPrepEditing();
     initABG();
     initViews();
 }
