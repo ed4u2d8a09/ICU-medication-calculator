@@ -178,16 +178,37 @@ h1 {
 
 /* ---------- Category sections ---------- */
 .category-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
     font-family: var(--font-ui);
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.12em;
     color: var(--color-primary);
-    margin: var(--space-6) 0 var(--space-3);
-    padding-left: var(--space-2);
-    border-left: 3px solid var(--color-accent);
-    line-height: 1.3;
+    /* Generous room above so the label sits with the cards it names, and a
+       clear gap below so it never crowds the first card. */
+    margin: var(--space-7) 0 var(--space-5);
+    line-height: 1.2;
+}
+
+/* Accent tick + hairline: the rule separates the section from the one above
+   without adding a heavy divider. */
+.category-header::before {
+    content: '';
+    flex: none;
+    width: 3px;
+    height: 0.95em;
+    border-radius: 2px;
+    background: var(--color-accent);
+}
+
+.category-header::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--color-border), transparent);
 }
 
 .category-header:first-child {
@@ -200,7 +221,7 @@ h1 {
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     align-items: start;
     gap: var(--space-3);
-    margin-top: var(--space-6);
+    margin-top: var(--space-7);
 }
 
 .category-row .category-header {
@@ -497,6 +518,11 @@ h1 {
 
 .abg-card-head .category-header {
     margin: 0;
+}
+
+/* Paired with a button on this row, so the hairline would fight the layout. */
+.abg-card-head .category-header::after {
+    content: none;
 }
 
 .abg-clear-btn {
