@@ -688,7 +688,7 @@ function gauge(label, value, unit, min, max, lo, hi, digits) {
 }
 
 // ---- Acid–base interpretation ---------------------------------------------
-function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun, k, uPh, feHco3) {
+function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun, k, uPh, feHco3, bp) {
     const highCO2 = paco2 > 45, lowCO2 = paco2 < 35;
     const highHCO3 = hco3 > 26, lowHCO3 = hco3 < 22;
 
@@ -825,6 +825,13 @@ function analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glu
     // Metabolic acidosis differential diagnosis (Fig 4-2)
     if (uniq.includes("MA") || agState === "high") {
         blocks.push(renderMetAcidosisDDx(agState, uag, og, resolveRTA(k, uPh, feHco3)));
+    }
+
+    // Metabolic alkalosis differential diagnosis (urine Cl⁻ / K⁺ tree). Also
+    // shown when the delta-delta uncovers an alkalosis hiding behind an AGMA.
+    const hiddenAlk = agState === "high" && hco3 + (ag - 12) > 26;
+    if (uniq.includes("MAl") || hiddenAlk) {
+        blocks.push(renderMetAlkalosisDDx(uCl, uK, bp, k));
     }
 
     return blocks.join("");
@@ -1023,6 +1030,118 @@ function renderMetAcidosisDDx(agState, uag, og, rta) {
     return html;
 }
 
+// Metabolic alkalosis: urine Cl⁻ splits saline-responsive from saline-resistant;
+// inside the resistant arm urine K⁺ picks off laxative abuse and blood pressure
+// separates mineralocorticoid excess from the normotensive causes.
+function renderMetAlkalosisDDx(uCl, uK, bp, k) {
+    const clKnown = isFinite(uCl);
+    const responsive = clKnown && uCl < 25;
+    const resistant = clKnown && uCl > 40;
+    const clGrey = clKnown && !responsive && !resistant;
+
+    let badge, badgeTone;
+    if (responsive) { badge = "Saline-responsive (U<sub>Cl</sub> &lt;25)"; badgeTone = "info"; }
+    else if (resistant) { badge = "Saline-resistant (U<sub>Cl</sub> &gt;40)"; badgeTone = "warn"; }
+    else if (clGrey) { badge = "U<sub>Cl</sub> 25–40 灰色地帶"; badgeTone = "muted"; }
+    else { badge = "輸入 Urine Cl⁻ 自動分流"; badgeTone = "muted"; }
+
+    const pill = state => state === "on"
+        ? `<span class="ddx-pill on">✓ 符合</span>`
+        : state === "off"
+            ? `<span class="ddx-pill off">✕ 排除</span>`
+            : `<span class="ddx-pill idle">待資料</span>`;
+    const respPill = pill(responsive ? "on" : resistant ? "off" : "idle");
+    const resistPill = pill(resistant ? "on" : responsive ? "off" : "idle");
+    const FLAG = `<span class="ddx-flag">最可能</span>`;
+
+    // Same rule as the acidosis tree: a leaf only lights up inside a branch the
+    // urine chloride has not already excluded.
+    const resistLive = !responsive;
+    const kKnown = isFinite(uK);
+    const laxHit = resistLive && kKnown && uK < 20 ? "ddx-hit" : "";
+    const kHigh = kKnown && uK > 30;
+    // BP still splits the arm when U_K was not sent, as long as it did not
+    // already point at laxatives.
+    const bpLive = resistLive && !laxHit && (kHigh || !kKnown);
+    const htnHit = bpLive && bp === "high" ? "ddx-hit" : "";
+    const normoHit = bpLive && bp === "normal" ? "ddx-hit" : "";
+    const severeKHit = normoHit && isFinite(k) && k < 2 ? "ddx-hit" : "";
+
+    let clLine = "";
+    if (clKnown) {
+        const dir = responsive
+            ? "&lt;25 → <strong>Saline-responsive</strong>（volume / Cl⁻ 缺乏，補 NaCl 可矯正）"
+            : resistant
+                ? "&gt;40 → <strong>Saline-resistant</strong>（往下看 U<sub>K</sub> 與血壓）"
+                : "25–40 → 灰色地帶，請結合病史（近期利尿劑常落在此區）";
+        clLine = `<div class="ddx-uag"><span class="ddx-uag-tag">計算推論</span><br>Urine Cl⁻ = <strong>${fmt(uCl, 0)}</strong> mEq/L → ${dir}</div>`;
+    }
+    let kLine = "";
+    if (resistLive && kKnown) {
+        const dir = uK < 20
+            ? "&lt;20 → <strong>Laxative abuse</strong>（腸道流失 K⁺，腎臟保 K⁺）"
+            : uK > 30
+                ? "&gt;30 → 腎性失 K⁺，依<strong>血壓</strong>分流"
+                : "20–30 → 介於兩者，請結合病史";
+        kLine = `<div class="ddx-uag"><span class="ddx-uag-tag">計算推論</span><br>Urine K⁺ = <strong>${fmt(uK, 0)}</strong> mEq/L → ${dir}</div>`;
+    }
+
+    const respClass = responsive ? "is-active" : (resistant ? "is-dim" : "");
+    const resistClass = [
+        resistant ? "is-active" : (responsive ? "is-dim" : ""),
+        (laxHit || htnHit || normoHit) ? "has-top" : ""
+    ].filter(Boolean).join(" ");
+
+    return `
+        <div class="abg-block tone-warn abg-ddx">
+            <div class="abg-block-head">
+                <span class="abg-block-title">Metabolic alkalosis 鑑別診斷 · U<sub>Cl</sub> / U<sub>K</sub></span>
+                <span class="abg-badge tone-${badgeTone}">${badge}</span>
+            </div>
+            <div class="ddx-note">
+                U<sub>Cl</sub> &lt;25 → <strong>Saline-responsive</strong>；U<sub>Cl</sub> &gt;40 → <strong>Saline-resistant</strong>。
+                Resistant 者再看 U<sub>K</sub>：&lt;20 → laxative abuse；&gt;30 → 依血壓分 mineralocorticoid excess 與 normotensive 原因。
+            </div>
+            <div class="ddx-tree">
+                <div class="ddx-branch tone-resp ${respClass}">
+                    <div class="ddx-branch-title"><span>U<sub>Cl</sub> &lt;25 — Saline-Responsive</span>${respPill}</div>
+                    ${clLine}
+                    <ul class="ddx-list">
+                        <li><span class="ddx-clue">GI loss of H⁺</span> → <strong>Emesis、NGT suction/drainage、Villous adenoma、Chloridorrhea</strong></li>
+                        <li><span class="ddx-clue">Renal loss</span> → <strong>Prior loop/thiazide diuretics（vol. deplete）</strong>、↓ Cl⁻ intake、Milk-alkali、Pendred syndrome</li>
+                        <li><span class="ddx-clue">其他</span> → <strong>Posthypercapnia</strong>、Sweat losses in cystic fibrosis</li>
+                    </ul>
+                </div>
+                <div class="ddx-branch tone-resist ${resistClass}">
+                    <div class="ddx-branch-title"><span>U<sub>Cl</sub> &gt;40 — Saline-Resistant</span>${resistPill}</div>
+                    ${kLine}
+                    <ul class="ddx-list">
+                        <li class="${laxHit}"><span class="ddx-clue">U<sub>K</sub> &lt;20</span> → <strong>Laxative abuse</strong>${laxHit ? FLAG : ""}</li>
+                        <li><span class="ddx-clue">U<sub>K</sub> &gt;30 → 依血壓分流</span>
+                            <ul>
+                                <li class="${htnHit}"><span class="ddx-clue pos">Hypertensive（mineralocorticoid excess）</span>${htnHit ? FLAG : ""}
+                                    <ul>
+                                        <li><strong>1° hyperaldosteronism</strong>（Conn's）</li>
+                                        <li><strong>2° hyperaldosteronism</strong>（renovascular disease、renin-secreting tumor）</li>
+                                        <li><strong>Non-aldosterone</strong>（Cushing's、Liddle's、exogenous mineralocorticoids、licorice）</li>
+                                    </ul>
+                                </li>
+                                <li class="${normoHit}"><span class="ddx-clue neg">Hypo- / normotensive</span>${normoHit ? FLAG : ""}
+                                    <ul>
+                                        <li><strong>Current diuretics</strong></li>
+                                        <li class="${severeKHit}"><strong>Severe hypokalemia</strong>（K⁺ &lt;2）${severeKHit ? FLAG : ""}</li>
+                                        <li><strong>Exogenous alkali load</strong>（合併 AKI 或 ↓ volume）</li>
+                                        <li><strong>Bartter's</strong>（loop-like）、<strong>Gitelman's</strong>（thiazide-like）</li>
+                                    </ul>
+                                </li>
+                            </ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>`;
+}
+
 // Returns { items, extra, tag } — `extra` names a further disorder revealed by
 // an over/under-shooting compensation; `tag` is the one-line compensation verdict.
 function compensationCheck(type, paco2, hco3) {
@@ -1203,13 +1322,15 @@ function runABG() {
     const bun = num("abg-bun");
     const uPh = num("abg-uph");
     const feHco3 = num("abg-fehco3");
+    const bpEl = document.getElementById("abg-bp");
+    const bp = bpEl ? bpEl.value : "";
 
     let html = "";
 
     const hasAB = isFinite(ph) && isFinite(paco2) && isFinite(hco3);
     if (hasAB) {
         html += `<div class="abg-section-title">酸鹼分析 · Acid–Base</div>`;
-        html += analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun, k, uPh, feHco3);
+        html += analyzeAcidBase(ph, paco2, hco3, na, cl, uNa, uCl, uK, measuredOsm, glucose, bun, k, uPh, feHco3, bp);
     }
 
     const hasOxy = isFinite(pao2) && isFinite(fio2) && isFinite(paco2);
@@ -1229,7 +1350,7 @@ function runABG() {
     }
 }
 
-const ABG_INPUT_IDS = ["abg-ph", "abg-paco2", "abg-hco3", "abg-pao2", "abg-fio2", "abg-age", "abg-na", "abg-cl", "abg-k", "abg-una", "abg-ucl", "abg-uk", "abg-uph", "abg-fehco3", "abg-osm", "abg-glu", "abg-bun"];
+const ABG_INPUT_IDS = ["abg-ph", "abg-paco2", "abg-hco3", "abg-pao2", "abg-fio2", "abg-age", "abg-na", "abg-cl", "abg-k", "abg-una", "abg-ucl", "abg-uk", "abg-bp", "abg-uph", "abg-fehco3", "abg-osm", "abg-glu", "abg-bun"];
 
 function clearABG() {
     ABG_INPUT_IDS.forEach(id => {
@@ -1244,7 +1365,9 @@ function clearABG() {
 function initABG() {
     ABG_INPUT_IDS.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.addEventListener("input", runABG);
+        if (!el) return;
+        // Older WebKit fires only `change` on a <select>
+        el.addEventListener(el.tagName === "SELECT" ? "change" : "input", runABG);
     });
     const clearBtn = document.getElementById("abg-clear");
     if (clearBtn) clearBtn.addEventListener("click", clearABG);

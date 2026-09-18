@@ -756,9 +756,24 @@ h1 {
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
-.abg-field input:focus {
+.abg-field input:focus,
+.abg-field select:focus {
     border-color: var(--color-secondary);
     box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.abg-field select {
+    background: var(--color-muted-surface);
+    border: 1.5px solid var(--color-border-strong);
+    border-radius: var(--radius-sm);
+    padding: var(--space-2) var(--space-3);
+    color: var(--color-foreground);
+    min-height: 44px;
+    font-family: var(--font-ui);
+    font-size: 0.95rem;
+    font-weight: 600;
+    outline: none;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .abg-results {
@@ -1068,6 +1083,8 @@ h1 {
 
 .ddx-branch.tone-agma  { --b-color: #dc2626; --b-ring: rgba(220, 38, 38, 0.22); --b-soft: rgba(220, 38, 38, 0.10); --b-line: rgba(220, 38, 38, 0.40); --b-hit: rgba(220, 38, 38, 0.14); }
 .ddx-branch.tone-nagma { --b-color: #2563eb; --b-ring: rgba(37, 99, 235, 0.22); --b-soft: rgba(37, 99, 235, 0.10); --b-line: rgba(37, 99, 235, 0.40); --b-hit: rgba(37, 99, 235, 0.14); }
+.ddx-branch.tone-resp   { --b-color: #059669; --b-ring: rgba(5, 150, 105, 0.22); --b-soft: rgba(5, 150, 105, 0.10); --b-line: rgba(5, 150, 105, 0.40); --b-hit: rgba(5, 150, 105, 0.14); }
+.ddx-branch.tone-resist { --b-color: #d97706; --b-ring: rgba(217, 119, 6, 0.22); --b-soft: rgba(217, 119, 6, 0.10); --b-line: rgba(217, 119, 6, 0.40); --b-hit: rgba(217, 119, 6, 0.14); }
 
 .ddx-branch-title {
     display: flex;

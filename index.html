@@ -10,7 +10,7 @@
     <!-- Bump ?v= on every styles.css / script.js change: GitHub Pages serves
          assets with a 10-minute cache, so a fixed filename can hand a visitor
          new HTML with stale CSS/JS. -->
-    <link rel="stylesheet" href="styles.css?v=20260830">
+    <link rel="stylesheet" href="styles.css?v=20260918">
 </head>
 <body>
     <div class="container">
@@ -114,6 +114,14 @@
                         <input type="number" id="abg-uk" step="1" placeholder="—" inputmode="decimal">
                     </div>
                     <div class="abg-field">
+                        <label for="abg-bp">血壓 <span class="abg-u">代鹼分流</span></label>
+                        <select id="abg-bp">
+                            <option value="">—</option>
+                            <option value="high">Hypertensive 高血壓</option>
+                            <option value="normal">Normo-/hypotensive 正常或低</option>
+                        </select>
+                    </div>
+                    <div class="abg-field">
                         <label for="abg-uph">Urine pH <span class="abg-u">RTA 分型</span></label>
                         <input type="number" id="abg-uph" step="0.1" placeholder="—" inputmode="decimal">
                     </div>
@@ -142,6 +150,6 @@
         </section>
     </div>
 
-    <script src="script.js?v=20260830"></script>
+    <script src="script.js?v=20260918"></script>
 </body>
 </html>
