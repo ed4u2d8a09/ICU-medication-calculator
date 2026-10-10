@@ -668,6 +668,8 @@ function verdict(tone, main, sub, tag) {
 }
 
 // Horizontal gauge: normal band shaded, marker shows where the patient sits.
+// Positions travel as data-* and are applied by positionGauges(): the CSP
+// (style-src 'self') blocks inline style="" attributes in injected HTML.
 function gauge(label, value, unit, min, max, lo, hi, digits) {
     const span = max - min;
     const pct = v => Math.max(0, Math.min(100, ((v - min) / span) * 100));
@@ -680,8 +682,8 @@ function gauge(label, value, unit, min, max, lo, hi, digits) {
                 <span class="gauge-value">${fmt(value, digits)}<span class="gauge-unit">${unit}</span><span class="gauge-arrow">${arrow}</span></span>
             </div>
             <div class="gauge-track">
-                <span class="gauge-band" style="left:${pct(lo)}%;width:${pct(hi) - pct(lo)}%"></span>
-                <span class="gauge-marker" style="left:${pct(value)}%"></span>
+                <span class="gauge-band" data-left="${pct(lo)}" data-width="${pct(hi) - pct(lo)}"></span>
+                <span class="gauge-marker" data-left="${pct(value)}"></span>
             </div>
             <div class="gauge-scale"><span>${min}</span><span class="gauge-norm">${lo}–${hi}</span><span>${max}</span></div>
         </div>`;
@@ -1347,7 +1349,15 @@ function runABG() {
         results.innerHTML = `<p class="abg-placeholder">填入 pH、PaCO₂、HCO₃⁻ 進行酸鹼分析；再加入 PaO₂ 與 FiO₂ 分析呼吸衰竭原因。</p>`;
     } else {
         results.innerHTML = html;
+        positionGauges(results);
     }
+}
+
+function positionGauges(root) {
+    root.querySelectorAll('.gauge-band, .gauge-marker').forEach(el => {
+        el.style.left = el.dataset.left + '%';
+        if (el.dataset.width) el.style.width = el.dataset.width + '%';
+    });
 }
 
 const ABG_INPUT_IDS = ["abg-ph", "abg-paco2", "abg-hco3", "abg-pao2", "abg-fio2", "abg-age", "abg-na", "abg-cl", "abg-k", "abg-una", "abg-ucl", "abg-uk", "abg-bp", "abg-uph", "abg-fehco3", "abg-osm", "abg-glu", "abg-bun"];
