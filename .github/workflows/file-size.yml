@@ -1,0 +1,63 @@
+# 這次改到的原始碼檔不得超過 900 行（ratchet：新檔或變長才擋；既有超標檔沒變長就放行）。
+#
+# 規則來源：Enterprise OS 開發規範第 11 條。本機的 ~/.claude/hooks/guard-file-size.sh
+# 在 Edit/Write 當下就擋，這裡是伺服器端第二道。
+# 為什麼不全掃：多個 repo 已有既有檔案超標，全掃會讓 CI 第一天就紅、之後被無視。
+# 不需要 npm install，幾秒跑完。
+
+name: file-size
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: file-size
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Check changed source files
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+          HARD_LIMIT: 900
+          WARN_LIMIT: 700
+        run: |
+          set -euo pipefail
+          ZERO=0000000000000000000000000000000000000000
+          if [ -z "$BASE" ] || [ "$BASE" = "$ZERO" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            changed="$(git diff-tree --no-commit-id --name-only -r --diff-filter=AM "$HEAD")"
+          else
+            changed="$(git diff --name-only --diff-filter=AM "$BASE" "$HEAD")"
+          fi
+          fail=0; warn=0
+          while IFS= read -r f; do
+            [ -n "$f" ] && [ -f "$f" ] || continue
+            case "$f" in
+              *.ts|*.tsx|*.js|*.jsx|*.mjs|*.cjs|*.py|*.go|*.rs|*.sql|*.css|*.scss|*.vue|*.svelte|*.sh|*.prisma) ;;
+              *) continue ;;
+            esac
+            case "$f" in
+              */node_modules/*|*/dist/*|*/build/*|*/.next/*|*/generated/*|*/migrations/*|*/_archive/*|*.min.js|*.min.css|*.generated.*|*/database.types.ts|*.lock) continue ;;
+            esac
+            n="$(wc -l < "$f" | tr -d ' ')"
+            # 既有超標檔：只要這次沒讓它更長就放行（修 bug 不該被舊債擋住）；新檔或變長才擋
+            before="$({ git show "$BASE:$f" 2>/dev/null || true; } | wc -l | tr -d ' ')"
+            if [ "$n" -gt "$HARD_LIMIT" ]; then
+              if [ "${before:-0}" -gt "$HARD_LIMIT" ] && [ "$n" -le "$before" ]; then
+                echo "::warning file=$f::$n 行（既有超標，本次未變長，放行）。仍應另開任務拆分。"; warn=$((warn+1))
+              else
+                echo "::error file=$f::$n 行，超過 ${HARD_LIMIT}（原 ${before} 行）。先拆分再合併。"; fail=$((fail+1))
+              fi
+            elif [ "$n" -gt "$WARN_LIMIT" ]; then echo "::warning file=$f::$n 行（${WARN_LIMIT}–${HARD_LIMIT}）。評估是否拆分，保留請在 PR 說明。"; warn=$((warn+1)); fi
+          done <<< "$changed"
+          echo "超標 ${fail}、警告 ${warn}"
+          [ "$fail" -eq 0 ]
